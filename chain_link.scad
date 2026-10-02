@@ -224,7 +224,6 @@ module assembly() {
 // outer се печата изправен на тесния край (x = -lobe_d/2 на масата на принтера)
 if      (part == "outer") translate([0, 0, lobe_d/2]) rotate([0, -90, 0]) outer_link();
 else if (part == "end")   translate([0, 0, lobe_d/2 + ext]) rotate([0, -90, 0]) end_link();
-else if (part == "end_r") translate([0, 0, lobe_d/2 + ext]) rotate([0, -90, 0])
-                              translate([pitch, 0, 0]) mirror([1, 0, 0]) end_link();
+else if (part == "end_r") mirror([1, 0, 0]) translate([0, 0, lobe_d/2 + ext]) rotate([0, -90, 0]) end_link();
 else if (part == "inner") inner_link();
 else if (part != "none") assembly();
