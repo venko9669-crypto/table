@@ -201,16 +201,13 @@ module mount() {
             // отрязано плоско на устието (на това се печата)
             translate(mouth) along_leg(phis[0]) translate([-100, -100, 0]) cube(200);
         }
-        // лайсната
-        rotate([0, 90, 0]) cylinder(d = slat_d + tol_slat, h = collar_len + 2, center = true);
+        // лайсната - през цялото тяло (тялото към крака е по-дълго от яката)
+        rotate([0, 90, 0]) cylinder(d = slat_d + tol_slat, h = 400, center = true);
         // гнездото за крака, с фаска на устието (то ляга на принтера)
         translate(mouth) along_leg(phis[0]) {
             translate([0, 0, -1]) cylinder(d = leg_d + tol, h = mount_sock + 1);
             hole_chamfer(leg_d + tol, 1);
         }
-        // фаски на яката за лайсната
-        for (sx = [-1, 1]) translate([sx * collar_len/2, 0, 0]) rotate([0, sx * -90, 0])
-            hole_chamfer(slat_d + tol_slat, hole_cham);
         // място за съседните лайсни
         for (y = [-slat_pitch, slat_pitch]) translate([0, y, 0]) rotate([0, 90, 0])
             cylinder(d = slat_d + 2*nb_clr, h = 300, center = true);
