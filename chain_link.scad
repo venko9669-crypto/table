@@ -44,6 +44,8 @@
 // Печат: outer и end - изправени на тесния край (каналът и процепът са
 //        вертикални), inner - плоско. Без подпори.
 
+include <print_helpers.scad>
+
 $fn = 64;
 
 /* [Тръби] */
@@ -57,7 +59,7 @@ waist      = 12;   // ширина на "талията" между двата �
 gap        = 1;    // хлабина между съседни звена в един слой
 tol_press  = 0.15; // хлабина на отворите при outer (стяга тръбата)
 tol_free   = 0.4;  // хлабина на отвора при inner (върти се)
-spacer     = 0.4;  // шайбичка около отвора на inner от двете страни
+spacer     = 0.4;  // шайбичка около отвора на inner (от горната страна)
 slot_clr   = 0.3;  // хлабина на inner в процепа на outer (общо)
 
 /* [Заключване] */
@@ -78,6 +80,12 @@ tol_pin    = 0.2;  // хлабина на отвора за пина
 stub       = 6;    // колко стърчи заключващата тръба зад пина
 fork_extra = 3;    // удебеляване на долната стена на вилката
 
+/* [Печат] */
+edge_r     = 2;    // заобляне на ъглите
+cham_out   = 1;    // фаска на външната страна (капачето)
+cham_in    = 0.6;  // фаска на вътрешната страна и по ръбовете
+hole_cham  = 0.5;  // фаска на входа на отворите
+
 /* [Изглед] */
 part    = "assembly"; // [outer, inner, end, end_r, assembly]
 n_tubes = 6;          // за assembly
@@ -85,7 +93,7 @@ arm_angle = 0;        // за assembly: ъгъл на отвореното ра�
 
 lobe_d = min(tube_d + 2*wall, pitch - gap);   // външен диаметър на "ухото"
 ch_d   = lock_d + tol_lock;                   // диаметър на канала
-layer_inner = t + 2*spacer;                   // дебелина на inner слоя
+layer_inner = t + 2*spacer;                   // място за inner слоя (плочка + шайбичка + луфт)
 t_A    = sock + cap_t;                        // дебелина на плочката A
 slot   = layer_inner + slot_clr;              // процеп между A и B
 boot_in = slot + t;                           // колко навътре стига outer (до края на B)
@@ -123,33 +131,56 @@ module holes(hole_d, z0, h) {
     for (x = [0, pitch]) translate([x, 0, z0]) cylinder(d = hole_d, h = h);
 }
 
-// Жълтото звено (едно цяло): z=0 е вътрешната страна на A, тръбите идват от -z.
+// Контур (по XY) на жълтото/крайното звено: горе ушите, долу ботушът.
+// ext_l > 0 добавя удължение навън за вилката на крайното звено.
+module link_profile(ext_l = 0) {
+    L = pitch + lobe_d;
+    round2d(edge_r, edge_r) {
+        stadium_2d();
+        translate([-lobe_d/2, y_bot]) square([L, -y_bot]);
+        if (ext_l > 0) {
+            yb = y_bot - fork_extra;
+            translate([-lobe_d/2 - ext_l, yb]) square([ext_l + 1, lobe_d/2 - yb]);
+        }
+    }
+}
+
+// Общото тяло на жълтото и крайното звено.
+// z=0 е вътрешната страна на A, тръбите идват от -z.
 // A: z 0..t_A (сляпо гнездо + капаче навън); процеп за inner; B: z_B..z_B+t.
-// Ботушът виси под ушите (-y) и свързва A и B.
-module outer_link() {
+module link_body(ext_l = 0) {
     L = pitch + lobe_d;
     difference() {
-        union() {
-            linear_extrude(t_A) stadium_2d();                         // A
-            translate([0, 0, z_B]) linear_extrude(t) stadium_2d();    // B
-            // ботуш под процепа
-            translate([-lobe_d/2, y_bot, z_B]) cube([L, y_top - y_bot, boot_in + t_A]);
-            // връзка ботуш - A и ботуш - B (под ушите, извън процепа)
-            translate([-lobe_d/2, y_bot, 0])   cube([L, -y_bot, t_A]);
-            translate([-lobe_d/2, y_bot, z_B]) cube([L, -y_bot, t]);
+        translate([0, 0, z_B]) cext(boot_in + t_A, cb = cham_in, ct = cham_out) link_profile(ext_l);
+        // процеп за синята плочка (над ботуша)
+        translate([-lobe_d/2 - (ext_l > 0 ? 0 : 1), y_top, -slot]) cube([L + 2, 50, slot]);
+        // гнезда в A (с фаска на входа откъм процепа)
+        for (x = [0, pitch]) translate([x, 0, 0]) {
+            translate([0, 0, -1]) cylinder(d = tube_d + tol_press, h = sock + 1);
+            hole_chamfer(tube_d + tol_press, hole_cham);
         }
-        holes(tube_d + tol_press, -1, sock + 1);           // гнезда в A
-        holes(tube_d + tol_press, z_B - 1, t + 2);         // отвори в B
+        // отвори в B (с фаски от двете страни)
+        for (x = [0, pitch]) translate([x, 0, z_B]) {
+            translate([0, 0, -1]) cylinder(d = tube_d + tol_press, h = t + 2);
+            hole_chamfer(tube_d + tol_press, hole_cham);
+            translate([0, 0, t]) mirror([0, 0, 1]) hole_chamfer(tube_d + tol_press, hole_cham);
+        }
         // полуотворен канал по дължина на веригата, отворът гледа към плота (-z)
-        translate([-lobe_d/2 - 1, ch_cy, ch_cz]) rotate([0, 90, 0])
-            cylinder(d = ch_d, h = L + 2);
+        translate([-lobe_d/2 - ext_l - 1, ch_cy, ch_cz]) rotate([0, 90, 0])
+            cylinder(d = ch_d, h = L + ext_l + 2);
+        // фаски на канала в двата края (по тях звеното ляга на принтера)
+        for (x = [-lobe_d/2, pitch + lobe_d/2]) if (!(ext_l > 0 && x < 0))
+            translate([x, ch_cy, ch_cz]) rotate([0, x < 0 ? 90 : -90, 0]) hole_chamfer(ch_d, hole_cham);
         // скосен вход, за да се щраква по-лесно
-        translate([-lobe_d/2 - 1, ch_cy, -boot_in]) rotate([90, 0, 90])
-            linear_extrude(L + 2) polygon([
+        translate([-lobe_d/2 - ext_l - 1, ch_cy, -boot_in]) rotate([90, 0, 90])
+            linear_extrude(L + ext_l + 2) polygon([
                 [-snap_open/2 - lead_in, -0.01], [snap_open/2 + lead_in, -0.01],
                 [snap_open/2, lead_in], [-snap_open/2, lead_in]]);
     }
 }
+
+// Жълтото звено
+module outer_link() link_body(0);
 
 // Крайно звено: жълтото + удължение навън (-x) с вилка за пина.
 // В удължението каналът е отворен навътре изцяло, за да може рамото да се завърта.
@@ -157,42 +188,44 @@ module end_link() {
     L0 = -lobe_d/2;                 // края на обикновеното звено
     yb = y_bot - fork_extra;
     difference() {
-        union() {
-            outer_link();
-            translate([L0 - ext, yb, z_B]) cube([ext + 0.01, lobe_d/2 - yb, boot_in + t_A]);
-        }
+        link_body(ext);
         // процеп за рамото в удължението: лентата на канала, отворена към -z
         translate([L0 - ext - 1, ch_cy - ch_d/2, z_B - 1])
             cube([ext + 1.01, ch_d, ch_cz - z_B + 1]);
-        translate([L0 - ext - 1, ch_cy, ch_cz]) rotate([0, 90, 0])
-            cylinder(d = ch_d, h = ext + 1.01);
         // място за опашката на рамото зад пина
         translate([x_pin, ch_cy - ch_d/2, ch_cz]) rotate([-90, 0, 0])
             cylinder(r = R_stub, h = ch_d);
-        // отвор за пина, по височина (y)
+        // отвор за пина, по височина (y), с фаски
         translate([x_pin, yb - 1, ch_cz]) rotate([-90, 0, 0])
             cylinder(d = pin_d + tol_pin, h = lobe_d/2 - yb + 2);
+        for (y = [yb, lobe_d/2]) translate([x_pin, y, ch_cz])
+            rotate([y < 0 ? -90 : 90, 0, 0]) hole_chamfer(pin_d + tol_pin, 0.4);
     }
 }
 
 // Огледалното крайно звено за другия край на веригата
 module end_link_r() translate([pitch, 0, 0]) mirror([1, 0, 0]) end_link();
 
-// Въртяща се плочка, с шайбички от двете страни
+// Въртяща се плочка: плоска отдолу (ляга цялата на принтера), шайбички отгоре.
+// Вътрешните ъгли между ушите и талията са заоблени.
 module inner_link() {
     hole_d = tube_d + tol_free;
     difference() {
         union() {
-            translate([0, 0, spacer]) linear_extrude(t) eight_2d();
-            for (x = [0, pitch]) translate([x, 0, 0])
-                cylinder(d = hole_d + 3, h = t + 2*spacer);
+            cext(t, cb = 0.4, ct = 0.4) round2d(0.01, 3) eight_2d();
+            for (x = [0, pitch]) translate([x, 0, t - 0.01])
+                cylinder(d = hole_d + 3, h = spacer + 0.01);
         }
-        holes(hole_d, -1, t + 2*spacer + 2);
+        for (x = [0, pitch]) translate([x, 0, 0]) {
+            translate([0, 0, -1]) cylinder(d = hole_d, h = t + spacer + 2);
+            hole_chamfer(hole_d, 0.4);
+            translate([0, 0, t + spacer]) mirror([0, 0, 1]) hole_chamfer(hole_d, 0.4);
+        }
     }
 }
 
 module assembly() {
-    z_inner = -slot + slot_clr/2;
+    z_inner = -slot + (slot - t - spacer)/2;
     tube_end = sock;
 
     for (i = [0 : n_tubes - 1])

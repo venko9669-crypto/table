@@ -33,6 +33,8 @@
 // Печат: shoe - на плоското дъно; hub - на плоската долна страна;
 //        mount - на устието на гнездото (то е плоско). Без подпори.
 
+include <print_helpers.scad>
+
 $fn = 96;
 
 /* [Маса] */
@@ -56,6 +58,7 @@ shoe_pad_d = 44;  // диаметър на стъпката
 shoe_pad_h = 3;   // дебелина на стъпката
 pad_recess = 0.8; // вдлъбнатина отдолу за гумено/филцово лепенче (0 = без)
 shoe_toe   = 70;  // колко навън (към ъгъла) продължава стъпката - разширява базата
+shoe_plate = 3;   // дебелина на плочата на стъпката (под ребрата)
 
 /* [Скоба на лайсна] */
 mount_drop = 20;  // колко под оста на лайсната е горният край на оста на крака
@@ -68,11 +71,12 @@ collar_wall = 3.5; // стена около лайсната
 tol_slat   = 0.3; // хлабина на яката (плъзга се по лайсната до мястото си)
 screw_d    = 2.8; // отвор за винт M3 (самонарезен), фиксира скобата на лайсната
 nb_clr     = 1.5; // хлабина до съседните лайсни
+hole_cham  = 0.5; // фаска на входа на отворите
 
 /* [Вложка в центъра] */
 hub_e = slat_pitch / cos(atan2(table_d/2, table_w/2));  // изместване (разминаване); така горните краища падат под лайсни
-hub_r = 50;       // радиус на сферата, от която е изрязана вложката
-hub_h = 44;       // височина на вложката (плоска отгоре и отдолу)
+hub_r = 46;       // радиус на сферата, от която е изрязана вложката
+hub_h = 40;       // височина на вложката (плоска отгоре и отдолу)
 
 /* [Изглед] */
 part = "assembly"; // [shoe, hub, mount, mount_r, assembly]
@@ -125,35 +129,55 @@ module shoe() {
     body_d = sock_d + 2*shoe_wall;
     // къде оста на крака стига пода - там центрираме стъпката
     x_floor = -shoe_z / tan(alpha);
+    xs = [x_floor + shoe_pad_d/4, -shoe_toe];         // предна и задна част на стъпката
+    module pad_2d() hull() {
+        translate([xs[0], 0]) circle(d = shoe_pad_d);
+        translate([xs[1], 0]) circle(d = shoe_pad_d * 0.7);
+    }
     difference() {
-        intersection() {
-            hull() {
-                translate([x_floor + shoe_pad_d/4, 0, 0]) cylinder(d = shoe_pad_d, h = shoe_pad_h);
-                // "пета" навън - разширява опорната база
-                translate([-shoe_toe, 0, 0]) cylinder(d = shoe_pad_d * 0.7, h = shoe_pad_h);
-                translate([0, 0, shoe_z]) rotate([0, 90 - alpha, 0])
-                    translate([0, 0, -body_d/2]) cylinder(d = body_d, h = shoe_sock + body_d/2);
+        union() {
+            // тънка плоча на стъпката, с фаска отдолу
+            cext(shoe_plate, cb = 0.6, ct = 0.6) pad_2d();
+            // тяло само колкото ръкава: вертикални стени от плочата до гнездото
+            intersection() {
+                hull() {
+                    translate([xs[1], 0, 0]) cylinder(d = body_d * 0.8, h = shoe_plate);
+                    translate([xs[0], 0, 0]) cylinder(d = body_d, h = shoe_plate);
+                    translate([0, 0, shoe_z]) rotate([0, 90 - alpha, 0])
+                        translate([0, 0, -body_d/2]) cylinder(d = body_d, h = shoe_sock + body_d/2);
+                }
+                translate([-200, -200, 0]) cube([400, 400, 200]);   // плоско дъно
             }
-            translate([-200, -200, 0]) cube([400, 400, 200]);   // плоско дъно
         }
-        // гнездо за крака
-        translate([0, 0, shoe_z]) rotate([0, 90 - alpha, 0]) cylinder(d = sock_d, h = shoe_sock + 50);
-        // вдлъбнатина за лепенче
-        if (pad_recess > 0) for (x = [x_floor + shoe_pad_d/4, -shoe_toe])
-            translate([x, 0, -1]) cylinder(d = shoe_pad_d * 0.7 - 8, h = pad_recess + 1);
+        // гнездо за крака, с фаска на входа
+        translate([0, 0, shoe_z]) rotate([0, 90 - alpha, 0]) {
+            cylinder(d = sock_d, h = shoe_sock + 50);
+            translate([0, 0, shoe_sock + 0.01]) mirror([0, 0, 1]) hole_chamfer(sock_d, 1);
+        }
+        // вдлъбнатини за лепенца
+        if (pad_recess > 0) for (i = [0, 1])
+            translate([xs[i], 0, -1]) cylinder(d = (i == 0 ? shoe_pad_d : shoe_pad_d * 0.7) - 8, h = pad_recess + 1);
     }
 }
 
 // ---------------- Вложка ----------------
 // Локално: центърът на кръстосването е в (0, 0, 0).
+// Сплескана сфера: стените ѝ са под <45° от вертикалата, печата се без
+// подпори. Вътрешността я олекотява слайсърът (15-20% gyroid запълване).
 module hub() {
     difference() {
         intersection() {
             sphere(r = hub_r);
             cube([3*hub_r, 3*hub_r, hub_h], center = true);
         }
-        for (phi = phis) translate([0, 0, -cross_z]) leg_frame(phi)
+        for (phi = phis) translate([0, 0, -cross_z]) leg_frame(phi) {
             cylinder(d = leg_d + tol, h = 3*hub_r, center = true);
+        }
+        // фаска по долния ръб (ляга на принтера)
+        translate([0, 0, -hub_h/2 - 0.01]) difference() {
+            cylinder(r = hub_r, h = 1);
+            cylinder(r1 = sqrt(hub_r^2 - (hub_h/2)^2) - 0.8, r2 = sqrt(hub_r^2 - (hub_h/2)^2) + 0.2, h = 1);
+        }
     }
 }
 
@@ -179,8 +203,14 @@ module mount() {
         }
         // лайсната
         rotate([0, 90, 0]) cylinder(d = slat_d + tol_slat, h = collar_len + 2, center = true);
-        // гнездото за крака
-        translate(mouth) along_leg(phis[0]) translate([0, 0, -1]) cylinder(d = leg_d + tol, h = mount_sock + 1);
+        // гнездото за крака, с фаска на устието (то ляга на принтера)
+        translate(mouth) along_leg(phis[0]) {
+            translate([0, 0, -1]) cylinder(d = leg_d + tol, h = mount_sock + 1);
+            hole_chamfer(leg_d + tol, 1);
+        }
+        // фаски на яката за лайсната
+        for (sx = [-1, 1]) translate([sx * collar_len/2, 0, 0]) rotate([0, sx * -90, 0])
+            hole_chamfer(slat_d + tol_slat, hole_cham);
         // място за съседните лайсни
         for (y = [-slat_pitch, slat_pitch]) translate([0, y, 0]) rotate([0, 90, 0])
             cylinder(d = slat_d + 2*nb_clr, h = 300, center = true);
