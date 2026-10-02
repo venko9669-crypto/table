@@ -27,8 +27,9 @@
 //             за горния край на крака. mount_r е огледалната (по 2 от всяка).
 //
 // Горните краища не стигат до звената на ръба (половин крак е 325 мм, а ръбът
-// е на 350 мм от центъра), затова скобите хващат лайсни на ~200 мм от центъра.
-// hub_e е избрано така, че четирите горни края да паднат точно под лайсни.
+// е на 350 мм от центъра), затова скобите хващат лайсни на ~170-220 мм от центъра.
+// hub_e и mount_drop са избрани така, че продължението на оста на всеки крак
+// да минава точно през оста на лайсна - тогава кракът не усуква лайсната.
 // Печат: shoe - на плоското дъно; hub - на плоската долна страна;
 //        mount - на устието на гнездото (то е плоско). Без подпори.
 
@@ -54,9 +55,11 @@ shoe_wall  = 4;   // стена около крака
 shoe_pad_d = 44;  // диаметър на стъпката
 shoe_pad_h = 3;   // дебелина на стъпката
 pad_recess = 0.8; // вдлъбнатина отдолу за гумено/филцово лепенче (0 = без)
+shoe_toe   = 70;  // колко навън (към ъгъла) продължава стъпката - разширява базата
 
 /* [Скоба на лайсна] */
-mount_drop = 16;  // колко под оста на лайсната е горният край на оста на крака
+mount_drop = 20;  // колко под оста на лайсната е горният край на оста на крака
+                  // (20 мм дава ос на крака, която минава точно през оста на лайсната)
 mount_sock = 30;  // дълбочина на гнездото за крака
 mount_floor = 3;  // дъно на гнездото
 mount_wall = 4;   // стена около крака
@@ -64,6 +67,7 @@ collar_len = 30;  // дължина на яката по лайсната
 collar_wall = 3.5; // стена около лайсната
 tol_slat   = 0.3; // хлабина на яката (плъзга се по лайсната до мястото си)
 screw_d    = 2.8; // отвор за винт M3 (самонарезен), фиксира скобата на лайсната
+nb_clr     = 1.5; // хлабина до съседните лайсни
 
 /* [Вложка в центъра] */
 hub_e = slat_pitch / cos(atan2(table_d/2, table_w/2));  // изместване (разминаване); така горните краища падат под лайсни
@@ -82,18 +86,27 @@ phi0 = atan2(table_d/2, table_w/2);                 // посока към ъг�
 phis = [phi0, 180 - phi0, 180 + phi0, -phi0];       // посоки към 4-те ъгъла (горния край)
 half_h = leg_len/2 * cos(alpha);                    // хоризонтално от центъра до края
 
+// Посока на крака (нагоре към ъгъла)
+function leg_dir(phi) = [cos(alpha)*cos(phi), cos(alpha)*sin(phi), sin(alpha)];
 // Горният край на крака с ъгъл phi
 function leg_top(phi) = [-hub_e*sin(phi) + half_h*cos(phi), hub_e*cos(phi) + half_h*sin(phi), leg_top_z];
+// Продължението на оста на крака пресича височината на лайсните тук.
+// Скобата се поставя там, така силата от крака минава през оста на лайсната
+// и не я усуква.
+k_top = mount_drop / sin(alpha);
+function leg_at_slat(phi) = leg_top(phi) + k_top * leg_dir(phi);
 // Най-близката лайсна (лайсните са центрирани около y = 0)
 y0_slat = -(n_slats - 1) * slat_pitch / 2;
 function slat_y(y) = y0_slat + round((y - y0_slat) / slat_pitch) * slat_pitch;
-T0 = leg_top(phis[0]);
-mount_dy = T0[1] - slat_y(T0[1]);                   // отместване на крака спрямо лайсната
-assert(abs((leg_top(phis[1])[1] - slat_y(leg_top(phis[1])[1])) - mount_dy) < 0.01,
+S0 = leg_at_slat(phis[0]);
+S1 = leg_at_slat(phis[1]);
+mount_dy = S0[1] - slat_y(S0[1]);                   // остатъчно разминаване с лайсната
+assert(abs((S1[1] - slat_y(S1[1])) - mount_dy) < 0.01,
        "Краката не падат симетрично под лайсни - провери hub_e");
+assert(abs(mount_dy) < 2, "Оста на крака не попада на лайсна - нагласи mount_drop");
 
-echo(str("Скоби: на лайсни y = ", slat_y(T0[1]), " и ", slat_y(leg_top(phis[1])[1]),
-         ", на x = ±", T0[0], " и ±", -leg_top(phis[1])[0], " мм от центъра; dy = ", mount_dy));
+echo(str("Скоби: на лайсни y = ", slat_y(S0[1]), " и ", slat_y(S1[1]),
+         ", на x = ±", S0[0], " и ±", -S1[0], " мм от центъра; dy = ", mount_dy));
 echo(str("Ъгъл на краката: ", alpha, "°; кръстосване на ", cross_z, " мм; ",
          "краищата на ", half_h, " мм от центъра (хоризонтално)"));
 
@@ -116,6 +129,8 @@ module shoe() {
         intersection() {
             hull() {
                 translate([x_floor + shoe_pad_d/4, 0, 0]) cylinder(d = shoe_pad_d, h = shoe_pad_h);
+                // "пета" навън - разширява опорната база
+                translate([-shoe_toe, 0, 0]) cylinder(d = shoe_pad_d * 0.7, h = shoe_pad_h);
                 translate([0, 0, shoe_z]) rotate([0, 90 - alpha, 0])
                     translate([0, 0, -body_d/2]) cylinder(d = body_d, h = shoe_sock + body_d/2);
             }
@@ -124,8 +139,8 @@ module shoe() {
         // гнездо за крака
         translate([0, 0, shoe_z]) rotate([0, 90 - alpha, 0]) cylinder(d = sock_d, h = shoe_sock + 50);
         // вдлъбнатина за лепенче
-        if (pad_recess > 0)
-            translate([x_floor + shoe_pad_d/4, 0, -1]) cylinder(d = shoe_pad_d - 8, h = pad_recess + 1);
+        if (pad_recess > 0) for (x = [x_floor + shoe_pad_d/4, -shoe_toe])
+            translate([x, 0, -1]) cylinder(d = shoe_pad_d * 0.7 - 8, h = pad_recess + 1);
     }
 }
 
@@ -144,10 +159,12 @@ module hub() {
 
 // ---------------- Скоба на лайсна ----------------
 // Локално: оста на лайсната е по X през (0, 0, 0). Кракът отива нагоре към
-// ъгъл phis[0]; горният край на оста му е в T = (0, mount_dy, -mount_drop).
+// ъгъл phis[0]; продължението на оста му минава през (0, mount_dy, 0), а
+// горният му край е mount_drop под лайсната.
+mount_T = [0, mount_dy, 0] - k_top * leg_dir(phis[0]);
 module mount() {
-    D = [cos(alpha)*cos(phis[0]), cos(alpha)*sin(phis[0]), sin(alpha)];
-    T = [0, mount_dy, -mount_drop];
+    D = leg_dir(phis[0]);
+    T = mount_T;
     mouth = T - mount_sock * D;                       // устието на гнездото
     boss_d = leg_d + tol + 2*mount_wall;
     collar_d = slat_d + tol_slat + 2*collar_wall;
@@ -164,6 +181,9 @@ module mount() {
         rotate([0, 90, 0]) cylinder(d = slat_d + tol_slat, h = collar_len + 2, center = true);
         // гнездото за крака
         translate(mouth) along_leg(phis[0]) translate([0, 0, -1]) cylinder(d = leg_d + tol, h = mount_sock + 1);
+        // място за съседните лайсни
+        for (y = [-slat_pitch, slat_pitch]) translate([0, y, 0]) rotate([0, 90, 0])
+            cylinder(d = slat_d + 2*nb_clr, h = 300, center = true);
         // винт M3 отстрани в яката
         for (x = [-collar_len/2 + 6, collar_len/2 - 6]) translate([x, 0, 0])
             rotate([90, 0, 0]) cylinder(d = screw_d, h = collar_d);
@@ -187,7 +207,7 @@ module assembly() {
     // лайсните, на които стоят скобите, и скобите
     for (k = [0 : 3]) {
         phi = phis[k];
-        Tk = leg_top(phi);
+        Tk = leg_at_slat(phi);
         rot = (k >= 2) ? 180 : 0;
         color("silver") translate([0, slat_y(Tk[1]), slat_z]) rotate([0, 90, 0])
             cylinder(d = slat_d, h = table_w, center = true);
@@ -200,9 +220,8 @@ if      (part == "shoe") shoe();
 else if (part == "hub")  translate([0, 0, hub_h/2]) hub();
 else if (part == "mount" || part == "mount_r") {
     // устието на гнездото на масата на принтера
-    D = [cos(alpha)*cos(phis[0]), cos(alpha)*sin(phis[0]), sin(alpha)];
-    mouth = [0, mount_dy, -mount_drop] - mount_sock * D;
+    mouth = mount_T - mount_sock * leg_dir(phis[0]);
     mirror([part == "mount_r" ? 1 : 0, 0, 0])
         rotate([0, -(90 - alpha), 0]) rotate([0, 0, -phis[0]]) translate(-mouth) mount();
 }
-else assembly();
+else if (part != "none") assembly();
