@@ -52,7 +52,7 @@ module folded_table() {
 
 // Всичко, което се прибира вътре
 module contents() {
-    z0 = sock - slat_len + 15;
+    z0 = sock - slat_len + 23;           // свободно между звената: 666 мм, краката са 650
     c = half - 5 - 1 - 7.5 - 1.5;     // крака в 4-те вътрешни ъгъла
     for (sx = [-1, 1], sy = [-1, 1]) color("lightgray")
         translate([sx * c, sy * c, z0]) cylinder(d = 15, h = 650);
