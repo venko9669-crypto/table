@@ -186,6 +186,26 @@ check(2 * ring >= leg_d + 1, f"до вложката остава полумес
 
 print()
 print("=" * 70)
+print("5б. СГЪВАНЕ НА КВАДРАТ (горната повърхност навътре)")
+print("=" * 70)
+side = 7                                   # стъпки на страна
+per = 4 * side
+seam_gap = (per - (n_slats - 1)) * pitch
+check(seam_gap >= seam, f"шев: {seam_gap} мм между крайните лайсни, нужни {seam:.0f} мм за вилките")
+sq = side * pitch
+# в ъгъла (90°) най-близките звена от двете страни са на 1 стъпка от ъгъла
+check(pitch >= lobe_d, f"90° в ъгъла: ушите на звената от двете страни са на {pitch - lobe_d:.1f} мм")
+in_end = sq - lobe_d
+in_mid = sq - slat_d
+print(f"       по осите на лайсните: {sq} x {sq} мм; 4 стави на 90° (лайсни №3, 10, 17, 24)")
+print(f"       свободно вътре: {in_end:.0f} x {in_end:.0f} мм при звената, {in_mid:.0f} x {in_mid:.0f} мм в средата")
+print(f"       отвън: ~{sq + 2*abs(y_bot):.0f} x {sq + 2*abs(y_bot):.0f} мм при ботушите, {sq + slat_d:.0f} x {sq + slat_d:.0f} в средата, дължина ~{slat_len + 2*cap_t:.0f}")
+check(2 * hub_r < in_end, f"вложката Ø{2*hub_r} влиза ({in_end:.0f})")
+corner_room = (in_end - 2 * hub_r) / 2 * math.sqrt(2) + (math.sqrt(2) - 1) * hub_r
+check(corner_room > leg_d, f"краката в 4-те вътрешни ъгъла покрай вложката ({corner_room:.0f} мм място)")
+
+print()
+print("=" * 70)
 print("6. ТОВАРОНОСИМОСТ (разпределен товар по плота, до провлачване)")
 print("=" * 70)
 # Q - общ разпределен товар [Н]. За всяко място: колко Н момент/сила на 1 Н от Q.

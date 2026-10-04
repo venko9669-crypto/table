@@ -23,8 +23,9 @@
 // Части:
 //   shoe    - обувчица на долния край на крака (плоско дъно, наклонено гнездо)
 //   hub     - вложката в центъра с 4 отвора
-//   mount   - скоба, надяната на лайсна от плота, със сляпо наклонено гнездо
-//             за горния край на крака. mount_r е огледалната (по 2 от всяка).
+//   mount   - скоба-щипка: щраква се на лайсна от плота отдолу, със сляпо
+//             наклонено гнездо за горния край на крака. mount_r е огледалната
+//             (по 2 от всяка). При сгъване се свалят и се прибират вътре.
 //
 // Горните краища не стигат до звената на ръба (половин крак е 325 мм, а ръбът
 // е на 350 мм от центъра), затова скобите хващат лайсни на ~170-220 мм от центъра.
@@ -68,7 +69,8 @@ mount_floor = 3;  // дъно на гнездото
 mount_wall = 4;   // стена около крака
 collar_len = 30;  // дължина на яката по лайсната
 collar_wall = 3.5; // стена около лайсната
-tol_slat   = 0.3; // хлабина на яката (плъзга се по лайсната до мястото си)
+tol_slat   = 0.2; // хлабина на яката
+clip_open  = 9.4; // отвор на щипката отгоре (< лайсната, за да щраква)
 screw_d    = 2.8; // отвор за винт M3 (самонарезен), фиксира скобата на лайсната
 nb_clr     = 1.5; // хлабина до съседните лайсни
 hole_cham  = 0.5; // фаска на входа на отворите
@@ -186,6 +188,8 @@ module hub() {
 // ъгъл phis[0]; продължението на оста му минава през (0, mount_dy, 0), а
 // горният му край е mount_drop под лайсната.
 mount_T = [0, mount_dy, 0] - k_top * leg_dir(phis[0]);
+// откъдето започва скосяването на входа на щипката (над най-тясното място)
+collar_open_z = sqrt(((slat_d + tol_slat)/2)^2 - (clip_open/2)^2) + 1.2;
 module mount() {
     D = leg_dir(phis[0]);
     T = mount_T;
@@ -203,6 +207,12 @@ module mount() {
         }
         // лайсната - през цялото тяло (тялото към крака е по-дълго от яката)
         rotate([0, 90, 0]) cylinder(d = slat_d + tol_slat, h = 400, center = true);
+        // щипка: отворено отгоре, скобата се щраква на лайсната отдолу и се сваля с ръка
+        translate([-200, -clip_open/2, 0]) cube([400, clip_open, 50]);
+        // скосен вход на щипката
+        translate([-200, 0, 0]) rotate([90, 0, 90]) linear_extrude(400) polygon([
+            [-clip_open/2, collar_open_z], [clip_open/2, collar_open_z],
+            [clip_open/2 + 6, collar_open_z + 6], [-clip_open/2 - 6, collar_open_z + 6]]);
         // гнездото за крака, с фаска на устието (то ляга на принтера)
         translate(mouth) along_leg(phis[0]) {
             translate([0, 0, -1]) cylinder(d = leg_d + tol, h = mount_sock + 1);
@@ -217,6 +227,12 @@ module mount() {
     }
 }
 module mount_r() mirror([1, 0, 0]) mount();
+
+// Скобата, обърната както се печата (устието на гнездото на z = 0)
+module mount_print() {
+    mouth = mount_T - mount_sock * leg_dir(phis[0]);
+    rotate([0, -(90 - alpha), 0]) rotate([0, 0, -phis[0]]) translate(-mouth) mount();
+}
 
 // ---------------- Сглобка ----------------
 module assembly() {
@@ -245,10 +261,5 @@ module assembly() {
 
 if      (part == "shoe") shoe();
 else if (part == "hub")  translate([0, 0, hub_h/2]) hub();
-else if (part == "mount" || part == "mount_r") {
-    // устието на гнездото на масата на принтера
-    mouth = mount_T - mount_sock * leg_dir(phis[0]);
-    mirror([part == "mount_r" ? 1 : 0, 0, 0])
-        rotate([0, -(90 - alpha), 0]) rotate([0, 0, -phis[0]]) translate(-mouth) mount();
-}
+else if (part == "mount" || part == "mount_r") mirror([part == "mount_r" ? 1 : 0, 0, 0]) mount_print();
 else if (part != "none") assembly();
